@@ -5,6 +5,7 @@ import { generateSecret } from '../utils/secrets';
 import { connectMetamask, connectBTCWallet } from '../utils/wallets';
 import axios from 'axios';
 import { ArrowDown } from 'lucide-react';
+import { ToastContainer, toast } from 'react-toastify';
 
 export default function SwapForm() {
   const [direction, setDirection] = useState<'eth_btc' | 'btc_eth'>('eth_btc');
@@ -34,6 +35,7 @@ export default function SwapForm() {
         setPrice(direction === 'eth_btc' ? eth / btc : btc / eth);
       } catch (err) {
         console.error('Failed to fetch prices', err);
+        toast.error('Failed to fetch prices');
       }
     };
 
@@ -52,10 +54,15 @@ export default function SwapForm() {
   };
 
   const handleConnect = async () => {
-    const address = direction === 'eth_btc'
-      ? await connectMetamask()
-      : await connectBTCWallet();
-    setWalletAddress(address);
+    try {
+      const address = direction === 'eth_btc'
+        ? await connectMetamask()
+        : await connectBTCWallet();
+      setWalletAddress(address);
+      toast.success('Wallet connected successfully');
+    } catch (err) {
+      toast.error('Failed to connect wallet');
+    }
   };
 
   const handleGenerateSecret = () => {
@@ -67,88 +74,102 @@ export default function SwapForm() {
     a.download = 'swap-secret.txt';
     a.click();
     setSecretInfo(secretData);
+    toast.success('Secret generated and downloaded');
   };
 
   const handleSwap = async () => {
     if (!secretInfo || !walletAddress || !amount) {
-      alert('All fields are required');
+      toast.error('Please fill all required fields');
       return;
     }
 
-    const response = await axios.post(`${process.env.NEXT_PUBLIC_BACKEND_URL}/api/create-order`, {
-      type: direction,
-      makerAddress: walletAddress,
-      hashLock: secretInfo.hash,
-      amountToGive: amount,
-      amountToReceive: (parseFloat(amount) * price).toFixed(6),
-    });
+    try {
+      const response = await axios.post(`${process.env.NEXT_PUBLIC_BACKEND_URL}/api/create-order`, {
+        type: direction,
+        makerAddress: walletAddress,
+        hashLock: secretInfo.hash,
+        amountToGive: amount,
+        amountToReceive: (parseFloat(amount) * price).toFixed(6),
+      });
 
-    console.log('response ',response)
+      console.log('response ', response)
 
-    setOrderId(response.data._id);
-    alert('Swap created!');
+      setOrderId(response.data._id);
+      toast.success('Swap created successfully!');
+    } catch (err) {
+      toast.error('Failed to create swap');
+    }
   };
 
   const fetchSourceEscrow = async () => {
     if (!orderId) return;
-    const res = await axios.get(`${process.env.NEXT_PUBLIC_BACKEND_URL}/api/source-escrow/${orderId}`);
-    const { sourceEscrowAddress, amount } = res.data;
+    try {
+      const res = await axios.get(`${process.env.NEXT_PUBLIC_BACKEND_URL}/api/source-escrow/${orderId}`);
+      const { sourceEscrowAddress, amount } = res.data;
 
-    if (sourceEscrowAddress) {
-      setSourceEscrow(sourceEscrowAddress);
-      setOrderAmount(amount);
-    } else {
-      alert('Order not fulfilled yet');
+      if (sourceEscrowAddress) {
+        setSourceEscrow(sourceEscrowAddress);
+        setOrderAmount(amount);
+        toast.success('Escrow address retrieved');
+      } else {
+        toast.warn('Order not fulfilled yet');
+      }
+    } catch (err) {
+      toast.error('Failed to fetch escrow address');
     }
   };
 
   const checkStatus = async () => {
     if (!orderId) return;
-    const res = await axios.get(`${process.env.NEXT_PUBLIC_BACKEND_URL}/api/order-funded/${orderId}`);
-    if (res.data.funded) {
-      setIsFunded(true);
-    } else {
-      alert('Not yet ready to claim');
+    try {
+      const res = await axios.get(`${process.env.NEXT_PUBLIC_BACKEND_URL}/api/order-funded/${orderId}`);
+      if (res.data.funded) {
+        setIsFunded(true);
+        toast.success('Order is funded and ready to claim');
+      } else {
+        toast.warn('Order not funded yet');
+      }
+    } catch (err) {
+      toast.error('Failed to check order status');
     }
   };
 
   const sendToEscrow = async () => {
-  if (!sourceEscrow || !orderAmount || !walletAddress) {
-    alert('Escrow details or wallet address missing');
-    return;
-  }
-
-  if (direction === 'eth_btc') {
-    try {
-      const amountInWei = (parseFloat(orderAmount.toString()) * 1e18).toString();
-
-      const txParams = {
-        from: walletAddress,
-        to: sourceEscrow,
-        value: BigInt(amountInWei).toString(16),
-      };
-
-      const txHash = await window.ethereum.request({
-        method: 'eth_sendTransaction',
-        params: [txParams],
-      });
-
-      alert(`Transaction sent! TxHash: ${txHash}`);
-      setHasSentToEscrow(true);
-    } catch (error: any) {
-      console.error(error);
-      alert(`Transaction failed: ${error.message}`);
+    if (!sourceEscrow || !orderAmount || !walletAddress) {
+      toast.error('Escrow details or wallet address missing');
+      return;
     }
-  } else if (direction === 'btc_eth') {
-    const btcUri = `bitcoin:${sourceEscrow}?amount=${orderAmount}`;
-    window.open(btcUri, '_blank');
-    setHasSentToEscrow(true);
-  }
-};
+
+    if (direction === 'eth_btc') {
+      try {
+        const amountInWei = (parseFloat(orderAmount.toString()) * 1e18).toString();
+        const txParams = {
+          from: walletAddress,
+          to: sourceEscrow,
+          value: BigInt(amountInWei).toString(16),
+        };
+
+        const txHash = await window.ethereum.request({
+          method: 'eth_sendTransaction',
+          params: [txParams],
+        });
+
+        toast.success(`Transaction sent! TxHash: ${txHash}`);
+        setHasSentToEscrow(true);
+      } catch (error: any) {
+        toast.error(`Transaction failed: ${error.message}`);
+      }
+    } else if (direction === 'btc_eth') {
+      const btcUri = `bitcoin:${sourceEscrow}?amount=${orderAmount}`;
+      window.open(btcUri, '_blank');
+      setHasSentToEscrow(true);
+      toast.success('BTC payment URI opened');
+    }
+  };
 
   const claimFunds = async () => {
     if (!claimSecret || !orderId) {
-      alert('Enter secret and ensure order is created');
+      toast.error('Please enter secret and ensure order is created');
       return;
     }
 
@@ -157,10 +178,9 @@ export default function SwapForm() {
         orderId,
         secret: claimSecret,
       });
-      alert('Funds claimed!');
+      toast.success('Funds claimed successfully!');
     } catch (e) {
-      console.error(e);
-      alert('Error claiming funds');
+      toast.error('Error claiming funds');
     }
   };
 
@@ -187,6 +207,8 @@ export default function SwapForm() {
 
   return (
     <div className="w-full max-w-md mx-auto p-4 bg-white rounded-2xl shadow-md">
+      <ToastContainer position="top-right" autoClose={3000} hideProgressBar={false} closeOnClick pauseOnHover />
+      
       {/* Sell Input */}
       <div className="bg-white rounded-2xl border p-4 mb-2">
         <p className="text-sm text-gray-500 mb-1">Sell</p>
@@ -291,8 +313,7 @@ export default function SwapForm() {
         >
           Send to Escrow
         </button>
-)}
-
+      )}
 
       {/* Status Check + Claim UI */}
       {sourceEscrow && hasSentToEscrow && !isFunded && (
