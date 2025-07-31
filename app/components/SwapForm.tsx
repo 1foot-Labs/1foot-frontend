@@ -10,6 +10,8 @@ export default function SwapForm() {
   const [direction, setDirection] = useState<'eth_btc' | 'btc_eth'>('eth_btc');
   const [amount, setAmount] = useState('');
   const [walletAddress, setWalletAddress] = useState('');
+  const [ethUsd, setEthUsd] = useState(0);
+  const [btcUsd, setBtcUsd] = useState(0);
   const [price, setPrice] = useState(0);
   const [secretInfo, setSecretInfo] = useState<{ secret: string; hash: string } | null>(null);
   const [orderId, setOrderId] = useState<string | null>(null);
@@ -20,13 +22,22 @@ export default function SwapForm() {
   const [claimSecret, setClaimSecret] = useState('');
 
   useEffect(() => {
-    fetch('https://api.coingecko.com/api/v3/simple/price?ids=bitcoin,ethereum&vs_currencies=usd')
-      .then(res => res.json())
-      .then(data => {
-        const ethUsd = data.ethereum.usd;
-        const btcUsd = data.bitcoin.usd;
-        setPrice(direction === 'eth_btc' ? ethUsd / btcUsd : btcUsd / ethUsd);
-      });
+    const fetchPrices = async () => {
+      try {
+        const res = await axios.get(
+          'https://api.coingecko.com/api/v3/simple/price?ids=ethereum,bitcoin&vs_currencies=usd'
+        );
+        const eth = res.data.ethereum.usd;
+        const btc = res.data.bitcoin.usd;
+        setEthUsd(eth);
+        setBtcUsd(btc);
+        setPrice(direction === 'eth_btc' ? eth / btc : btc / eth);
+      } catch (err) {
+        console.error('Failed to fetch prices', err);
+      }
+    };
+
+    fetchPrices();
   }, [direction]);
 
   const handleFlipDirection = () => {
@@ -160,7 +171,17 @@ export default function SwapForm() {
 
   const usdEstimate = (token: 'sell' | 'buy') => {
     const amt = parseFloat(amount || '0');
-    const value = token === 'sell' ? amt * (direction === 'eth_btc' ? 3864 : 58400) : amt * price * (direction === 'eth_btc' ? 58400 : 3864);
+    if (!amt || !ethUsd || !btcUsd || !price) return '$0.00';
+
+    let value = 0;
+
+    if (token === 'sell') {
+      value = direction === 'eth_btc' ? amt * ethUsd : amt * btcUsd;
+    } else {
+      const buyAmt = amt * price;
+      value = direction === 'eth_btc' ? buyAmt * btcUsd : buyAmt * ethUsd;
+    }
+
     return `$${value.toFixed(2)}`;
   };
 
