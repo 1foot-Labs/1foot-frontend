@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { generateSecret } from '../utils/secrets';
 import { connectMetamask, connectBTCWallet } from '../utils/wallets';
-import { createOrder } from '../utils/api';
+import axios from 'axios';
 import { ArrowDown } from 'lucide-react';
 
 export default function SwapForm() {
@@ -12,6 +12,12 @@ export default function SwapForm() {
   const [walletAddress, setWalletAddress] = useState('');
   const [price, setPrice] = useState(0);
   const [secretInfo, setSecretInfo] = useState<{ secret: string; hash: string } | null>(null);
+  const [orderId, setOrderId] = useState<string | null>(null);
+  const [sourceEscrow, setSourceEscrow] = useState<string | null>(null);
+  const [orderAmount, setOrderAmount] = useState<number | null>(null);
+  const [hasSentToEscrow, setHasSentToEscrow] = useState(false);
+  const [isFunded, setIsFunded] = useState<boolean>(false);
+  const [claimSecret, setClaimSecret] = useState('');
 
   useEffect(() => {
     fetch('https://api.coingecko.com/api/v3/simple/price?ids=bitcoin,ethereum&vs_currencies=usd')
@@ -28,6 +34,10 @@ export default function SwapForm() {
     setAmount('');
     setSecretInfo(null);
     setWalletAddress('');
+    setOrderId(null);
+    setSourceEscrow(null);
+    setIsFunded(false);
+    setClaimSecret('');
   };
 
   const handleConnect = async () => {
@@ -54,15 +64,93 @@ export default function SwapForm() {
       return;
     }
 
-    await createOrder({
+    const response = await axios.post(`${process.env.NEXT_PUBLIC_BACKEND_URL}/api/create-order`, {
       type: direction,
       makerAddress: walletAddress,
-      hash: secretInfo.hash,
+      hashLock: secretInfo.hash,
       amountToGive: amount,
       amountToReceive: (parseFloat(amount) * price).toFixed(6),
     });
 
+    console.log('response ',response)
+
+    setOrderId(response.data._id);
     alert('Swap created!');
+  };
+
+  const fetchSourceEscrow = async () => {
+    if (!orderId) return;
+    const res = await axios.get(`${process.env.NEXT_PUBLIC_BACKEND_URL}/api/source-escrow/${orderId}`);
+    const { sourceEscrowAddress, amount } = res.data;
+
+    if (sourceEscrowAddress) {
+      setSourceEscrow(sourceEscrowAddress);
+      setOrderAmount(amount);
+    } else {
+      alert('Order not fulfilled yet');
+    }
+  };
+
+  const checkStatus = async () => {
+    if (!orderId) return;
+    const res = await axios.get(`${process.env.NEXT_PUBLIC_BACKEND_URL}/api/order-funded/${orderId}`);
+    if (res.data.funded) {
+      setIsFunded(true);
+    } else {
+      alert('Not yet ready to claim');
+    }
+  };
+
+  const sendToEscrow = async () => {
+  if (!sourceEscrow || !orderAmount || !walletAddress) {
+    alert('Escrow details or wallet address missing');
+    return;
+  }
+
+  if (direction === 'eth_btc') {
+    try {
+      const amountInWei = (parseFloat(orderAmount.toString()) * 1e18).toString();
+
+      const txParams = {
+        from: walletAddress,
+        to: sourceEscrow,
+        value: BigInt(amountInWei).toString(16),
+      };
+
+      const txHash = await window.ethereum.request({
+        method: 'eth_sendTransaction',
+        params: [txParams],
+      });
+
+      alert(`Transaction sent! TxHash: ${txHash}`);
+      setHasSentToEscrow(true);
+    } catch (error: any) {
+      console.error(error);
+      alert(`Transaction failed: ${error.message}`);
+    }
+  } else if (direction === 'btc_eth') {
+    const btcUri = `bitcoin:${sourceEscrow}?amount=${orderAmount}`;
+    window.open(btcUri, '_blank');
+    setHasSentToEscrow(true);
+  }
+};
+
+  const claimFunds = async () => {
+    if (!claimSecret || !orderId) {
+      alert('Enter secret and ensure order is created');
+      return;
+    }
+
+    try {
+      await axios.post(`${process.env.NEXT_PUBLIC_BACKEND_URL}/api/claim`, {
+        orderId,
+        secret: claimSecret,
+      });
+      alert('Funds claimed!');
+    } catch (e) {
+      console.error(e);
+      alert('Error claiming funds');
+    }
   };
 
   const sellSymbol = direction === 'eth_btc' ? 'ETH' : 'BTC';
@@ -78,6 +166,7 @@ export default function SwapForm() {
 
   return (
     <div className="w-full max-w-md mx-auto p-4 bg-white rounded-2xl shadow-md">
+      {/* Sell Input */}
       <div className="bg-white rounded-2xl border p-4 mb-2">
         <p className="text-sm text-gray-500 mb-1">Sell</p>
         <div className="flex items-center justify-between">
@@ -96,6 +185,7 @@ export default function SwapForm() {
         <p className="text-sm text-gray-400 mt-1">{usdEstimate('sell')}</p>
       </div>
 
+      {/* Direction Flip */}
       <div className="flex justify-center my-2">
         <button
           onClick={handleFlipDirection}
@@ -105,6 +195,7 @@ export default function SwapForm() {
         </button>
       </div>
 
+      {/* Buy Display */}
       <div className="bg-white rounded-2xl border p-4 mb-4">
         <p className="text-sm text-gray-500 mb-1">Buy</p>
         <div className="flex items-center justify-between">
@@ -119,6 +210,7 @@ export default function SwapForm() {
         <p className="text-sm text-gray-400 mt-1">{usdEstimate('buy')}</p>
       </div>
 
+      {/* Wallet Connect & Secret Management */}
       {!walletAddress ? (
         <button
           onClick={handleConnect}
@@ -141,24 +233,79 @@ export default function SwapForm() {
             </button>
           )}
 
-          {secretInfo && (
-            <>
-              <div className="text-sm mb-3">
-                <span className="font-medium">Secret Hash:</span><br />
-                <code className="text-xs break-all bg-gray-200 p-2 rounded inline-block w-full">
-                  {secretInfo.hash}
-                </code>
-              </div>
-
-              <button
-                onClick={handleSwap}
-                className="bg-black text-white px-4 py-3 w-full rounded-full"
-              >
-                Swap
-              </button>
-            </>
+          {secretInfo && !orderId && (
+            <button
+              onClick={handleSwap}
+              className="bg-black text-white px-4 py-3 w-full rounded-full"
+            >
+              Swap
+            </button>
           )}
         </>
+      )}
+
+      {/* After Swap: Escrow Step */}
+      {orderId && !sourceEscrow && (
+        <button
+          onClick={fetchSourceEscrow}
+          className="mt-4 w-full bg-blue-100 text-blue-800 font-semibold py-2 rounded-full"
+        >
+          Get Escrow Address
+        </button>
+      )}
+
+      {sourceEscrow && !hasSentToEscrow && !isFunded && (
+        <div className="mt-4 p-3 border rounded bg-gray-50">
+          <p className="text-sm">
+            Send <strong>{orderAmount}</strong> {sellSymbol} to:
+          </p>
+          <code className="block text-xs break-all mt-1">{sourceEscrow}</code>
+        </div>
+      )}
+
+      {sourceEscrow && !hasSentToEscrow && !isFunded && (
+        <button
+          onClick={sendToEscrow}
+          className="mt-3 w-full bg-blue-600 text-white font-semibold py-2 px-4 rounded hover:bg-blue-700"
+        >
+          Send to Escrow
+        </button>
+)}
+
+
+      {/* Status Check + Claim UI */}
+      {sourceEscrow && hasSentToEscrow && !isFunded && (
+        <div className="mt-4 p-3 border rounded bg-gray-50">
+          <p className="text-sm">
+            Deposited <strong>{orderAmount}</strong> {sellSymbol} to:
+          </p>
+          <code className="block text-xs break-all mt-1">{sourceEscrow}</code>
+        </div>
+      )}
+      {sourceEscrow && hasSentToEscrow && !isFunded && (
+        <button
+          onClick={checkStatus}
+          className="mt-4 w-full bg-yellow-100 text-yellow-800 font-semibold py-2 rounded-full"
+        >
+          Check Status
+        </button>
+      )}
+
+      {isFunded && (
+        <div className="mt-4">
+          <input
+            placeholder="Enter secret to claim"
+            className="w-full p-2 border rounded mb-2"
+            value={claimSecret}
+            onChange={(e) => setClaimSecret(e.target.value)}
+          />
+          <button
+            onClick={claimFunds}
+            className="w-full bg-purple-600 text-white font-semibold py-2 rounded-full"
+          >
+            Claim Funds
+          </button>
+        </div>
       )}
     </div>
   );
