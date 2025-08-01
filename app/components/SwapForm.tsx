@@ -14,7 +14,7 @@ export default function SwapForm() {
   const [ethUsd, setEthUsd] = useState(0);
   const [btcUsd, setBtcUsd] = useState(0);
   const [price, setPrice] = useState(0);
-  const [secretInfo, setSecretInfo] = useState<{ secret: string; hash: string } | null>(null);
+  const [secretInfo, setSecretInfo] = useState<{ secret: string; hash160: string, sha3: string } | null>(null);
   const [orderId, setOrderId] = useState<string | null>(null);
   const [sourceEscrow, setSourceEscrow] = useState<string | null>(null);
   const [orderAmount, setOrderAmount] = useState<number | null>(null);
@@ -82,12 +82,15 @@ export default function SwapForm() {
       toast.error('Please fill all required fields');
       return;
     }
+    const pubKey = "022514f3c0d22eac4d45ecc6ed9fb17fa44cebb88d590b79ca834b20a552f9bb67"
 
     try {
       const response = await axios.post(`${process.env.NEXT_PUBLIC_BACKEND_URL}/api/create-order`, {
         type: direction,
-        makerAddress: walletAddress,
-        hashLock: secretInfo.hash,
+        makerEthAddress: walletAddress,
+        pubKey: pubKey,
+        hash160: secretInfo.hash160,
+        sha3: secretInfo.sha3,
         amountToGive: amount,
         amountToReceive: (parseFloat(amount) * price).toFixed(6),
       });
