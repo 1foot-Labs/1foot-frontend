@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { generateSecret } from '../utils/secrets';
-import { connectMetamask, connectBTCWallet } from '../utils/wallets';
+import { connectMetamask } from '../utils/wallets';
 import axios from 'axios';
 import { ArrowDown } from 'lucide-react';
 import { ToastContainer, toast } from 'react-toastify';
@@ -21,6 +21,7 @@ export default function SwapForm() {
   const [hasSentToEscrow, setHasSentToEscrow] = useState(false);
   const [isFunded, setIsFunded] = useState<boolean>(false);
   const [claimSecret, setClaimSecret] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
     const fetchPrices = async () => {
@@ -85,6 +86,7 @@ export default function SwapForm() {
     }
     const pubKey = "022514f3c0d22eac4d45ecc6ed9fb17fa44cebb88d590b79ca834b20a552f9bb67"
 
+    setIsLoading(true);
     try {
       const response = await axios.post(`${process.env.NEXT_PUBLIC_BACKEND_URL}/api/create-order`, {
         type: direction,
@@ -101,6 +103,8 @@ export default function SwapForm() {
       toast.success('Swap created successfully!');
     } catch (err) {
       toast.error('Failed to create swap');
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -282,9 +286,14 @@ export default function SwapForm() {
           {secretInfo && !orderId && (
             <button
               onClick={handleSwap}
-              className="bg-black text-white px-4 py-3 w-full rounded-full"
+              disabled={isLoading}
+              className={`px-4 py-3 w-full rounded-full ${
+                isLoading 
+                  ? 'bg-gray-400 text-gray-200 cursor-not-allowed' 
+                  : 'bg-black text-white'
+              }`}
             >
-              Swap
+              {isLoading ? 'Creating Swap...' : 'Swap'}
             </button>
           )}
         </>

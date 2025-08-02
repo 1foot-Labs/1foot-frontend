@@ -31,21 +31,21 @@ export async function connectMetamask(): Promise<string> {
   }
 }
 
-export async function connectBTCWallet(): Promise<string> {
-  if (!window.unisat) {
-    throw new Error('Bitcoin wallet (UniSat) is not installed');
-  }
+// export async function connectBTCWallet(): Promise<string> {
+//   if (!window.unisat) {
+//     throw new Error('Bitcoin wallet (UniSat) is not installed');
+//   }
 
-  try {
-    const accounts = await window.unisat.requestAccounts();
+//   try {
+//     const accounts = await window.unisat.requestAccounts();
     
-    if (accounts.length === 0) {
-      throw new Error('No Bitcoin accounts found');
-    }
+//     if (accounts.length === 0) {
+//       throw new Error('No Bitcoin accounts found');
+//     }
 
-    return accounts[0];
-  } catch (error) {
-    console.error('Bitcoin wallet connection error:', error);
-    throw new Error('Failed to connect to Bitcoin wallet');
-  }
-}
+//     return accounts[0];
+//   } catch (error) {
+//     console.error('Bitcoin wallet connection error:', error);
+//     throw new Error('Failed to connect to Bitcoin wallet');
+//   }
+// }
