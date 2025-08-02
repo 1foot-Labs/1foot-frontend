@@ -97,8 +97,6 @@ export default function SwapForm() {
         amountToReceive: (parseFloat(amount) * price).toFixed(6),
       });
 
-      console.log('response ', response)
-
       setOrderId(response.data._id);
       toast.success('Swap created successfully!');
     } catch (err) {
@@ -223,10 +221,17 @@ export default function SwapForm() {
           <input
             type="number"
             placeholder="0"
+            min="0"
+            step="any"
             value={amount}
-            onChange={(e) => setAmount(e.target.value)}
-            className="bg-transparent text-2xl font-medium w-1/2 focus:outline-none"
-          />
+            onChange={(e) => {
+              const value = e.target.value;
+              if (value === '' || parseFloat(value) >= 0) {
+                setAmount(value);
+              }
+            }}
+            className="bg-transparent text-2xl font-medium w-1/2 focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+            />
           <div className="flex items-center gap-2 rounded-full px-3 py-1 bg-white border shadow-sm">
             <img src={sellLogo} alt={sellSymbol} className="w-5 h-5" />
             <span className="font-semibold">{sellSymbol}</span>
