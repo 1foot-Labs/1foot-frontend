@@ -1,23 +1,17 @@
 import crypto from 'crypto';
-import { keccak256 } from 'js-sha3';
 
 export function generateSecret(): {
   secret: string;
-  hash160: string;
-  sha3: string;
+  sha256: string;
 } {
-  const secretInt = Math.floor(Math.random() * 256) + 1;
-  const secret = secretInt.toString()
+  const secret = Math.floor(Math.random() * 256 + 1).toString(); 
 
-  const secretBuffer = Buffer.from([secretInt]);
-
-  const sha256 = crypto.createHash('sha256').update(secretBuffer).digest();
-  const hash160 = crypto.createHash('ripemd160').update(sha256).digest('hex');
-  const sha3 = keccak256(secretBuffer);
+  const sha256 = crypto.createHash('sha256')
+    .update(secret) // directly hash the string
+    .digest('hex');
 
   return {
     secret,
-    hash160,
-    sha3
+    sha256
   };
 }
