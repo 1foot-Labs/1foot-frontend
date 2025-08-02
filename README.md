@@ -1,5 +1,7 @@
 This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
 
+## 1foot Frontend provides users with a one-stop solution for BTC-ETH atomic swaps. It communicates with the relayer and coordinates the swaps, abstracting all complexities behind the frontend.
+
 ## Getting Started
 
 First, run the development server:
